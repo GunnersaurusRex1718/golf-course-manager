@@ -1,4 +1,4 @@
-import { TILE_SIZE, COLS, ROWS, YARDS_PER_TILE, OVERVIEW_ZOOM } from '../config/GameConfig.js';
+import { TILE_SIZE, YARDS_PER_TILE, OVERVIEW_ZOOM } from '../config/GameConfig.js';
 import HoleSystem from '../systems/HoleSystem.js';
 import { generateCourse } from '../systems/ProceduralCourse.js';
 
@@ -17,7 +17,7 @@ const TILE_KEYS = Object.keys(TILES);
 
 const MODE = {
   PAINT:           'paint',
-  OVERVIEW_SELECT: 'overview_select', // tap to pick zone for new hole
+  OVERVIEW_SELECT: 'overview_select',
   PLACE_TEE:       'place_tee',
   PLACE_GREEN:     'place_green',
   PICK_PAR:        'pick_par',
@@ -44,24 +44,29 @@ export default class CourseScene extends Phaser.Scene {
   }
 
   create() {
-    const worldW = COLS * TILE_SIZE;
-    const worldH = ROWS * TILE_SIZE;
+    // Read live canvas dimensions — world is 2x the screen so overview at 0.47 fills it
+    const sw = this.scale.width;
+    const sh = this.scale.height;
+    this.cols = Math.ceil(2 * sw / TILE_SIZE);
+    this.rows = Math.ceil(2 * (sh - 94) / TILE_SIZE);
+
+    const worldW = this.cols * TILE_SIZE;
+    const worldH = this.rows * TILE_SIZE;
 
     if (this.mode === 'career') {
-      const { grid, holes } = generateCourse(COLS, ROWS, { quality: 'poor' });
+      const { grid, holes } = generateCourse(this.cols, this.rows, { quality: 'poor' });
       this.grid = grid;
       holes.forEach(h => this.holeSystem.holes.push(h));
     } else {
-      this.grid = Array.from({ length: ROWS }, () => Array(COLS).fill('ROUGH'));
+      this.grid = Array.from({ length: this.rows }, () => Array(this.cols).fill('ROUGH'));
     }
 
     this.gridGraphics = this.add.graphics();
     this.drawGrid();
-
     this.markerLayer = this.add.graphics();
 
     this.cameras.main.setBounds(0, 0, worldW, worldH);
-    this.cameras.main.setScroll(0, worldH * 0.5);
+    this.cameras.main.setScroll(0, worldH * 0.25);
 
     this.input.on('pointerdown', this.onPointerDown, this);
     this.input.on('pointermove', this.onPointerMove, this);
@@ -87,24 +92,16 @@ export default class CourseScene extends Phaser.Scene {
 
     const wp = this.cameras.main.getWorldPoint(ptr.x, ptr.y);
 
-    // Any tap in overview zooms into that spot
     if (this.isOverview) {
       this.zoomToPoint(wp.x, wp.y);
       return;
     }
-
     if (this.placementMode === MODE.OVERVIEW_SELECT) {
       this.zoomToPoint(wp.x, wp.y);
       return;
     }
-    if (this.placementMode === MODE.PLACE_TEE) {
-      this.placeTee(wp);
-      return;
-    }
-    if (this.placementMode === MODE.PLACE_GREEN) {
-      this.placeGreen(wp);
-      return;
-    }
+    if (this.placementMode === MODE.PLACE_TEE) { this.placeTee(wp); return; }
+    if (this.placementMode === MODE.PLACE_GREEN) { this.placeGreen(wp); return; }
     if (this.placementMode === MODE.PAINT) {
       this.isDragging = true;
       this.paintTile(wp);
@@ -119,7 +116,7 @@ export default class CourseScene extends Phaser.Scene {
       const row = Math.floor(wp.y / TILE_SIZE);
       const dx = col - this.pendingTee.col;
       const dy = row - this.pendingTee.row;
-      const yards = Math.round(Math.sqrt(dx*dx + dy*dy) * YARDS_PER_TILE);
+      const yards = Math.round(Math.sqrt(dx * dx + dy * dy) * YARDS_PER_TILE);
       this.updateStatusText(`Tap to place the Pin  •  ${yards} yds`);
     }
 
@@ -134,7 +131,7 @@ export default class CourseScene extends Phaser.Scene {
   paintTile(wp) {
     const col = Math.floor(wp.x / TILE_SIZE);
     const row = Math.floor(wp.y / TILE_SIZE);
-    if (row < 0 || row >= ROWS || col < 0 || col >= COLS) return;
+    if (row < 0 || row >= this.rows || col < 0 || col >= this.cols) return;
     if (this.grid[row][col] === this.selectedTile) return;
     this.grid[row][col] = this.selectedTile;
     this.drawGrid();
@@ -142,43 +139,48 @@ export default class CourseScene extends Phaser.Scene {
 
   drawGrid() {
     this.gridGraphics.clear();
-
-    // Tiles — full size, no gap (fixes the bold/normal pixel pattern)
-    for (let r = 0; r < ROWS; r++) {
-      for (let c = 0; c < COLS; c++) {
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
         this.gridGraphics.fillStyle(TILES[this.grid[r][c]].color, 1);
         this.gridGraphics.fillRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
       }
     }
-
-    // Subtle grid lines every 5 tiles
     this.gridGraphics.lineStyle(0.5, 0x000000, 0.12);
-    for (let c = 0; c <= COLS; c += 5) {
-      this.gridGraphics.lineBetween(c * TILE_SIZE, 0, c * TILE_SIZE, ROWS * TILE_SIZE);
+    for (let c = 0; c <= this.cols; c += 5) {
+      this.gridGraphics.lineBetween(c * TILE_SIZE, 0, c * TILE_SIZE, this.rows * TILE_SIZE);
     }
-    for (let r = 0; r <= ROWS; r += 5) {
-      this.gridGraphics.lineBetween(0, r * TILE_SIZE, COLS * TILE_SIZE, r * TILE_SIZE);
+    for (let r = 0; r <= this.rows; r += 5) {
+      this.gridGraphics.lineBetween(0, r * TILE_SIZE, this.cols * TILE_SIZE, r * TILE_SIZE);
     }
   }
 
   // ─── Camera ──────────────────────────────────────────────────────────────
 
+  showEditUI() {
+    this.editUI.forEach(el => el.setVisible(true));
+    this.holeListContainer.setVisible(true);
+    this.overviewHint.setVisible(false);
+    this.overviewBtnText.setText('Overview');
+    this.isOverview = false;
+  }
+
+  hideEditUI() {
+    this.editUI.forEach(el => el.setVisible(false));
+    this.holeListContainer.setVisible(false);
+    this.overviewHint.setVisible(true);
+    this.overviewBtnText.setText('Close Map');
+    this.isOverview = true;
+  }
+
   toggleOverview() {
-    this.isOverview = !this.isOverview;
-    if (this.isOverview) {
-      this.editUI.forEach(el => el.setVisible(false));
-      this.holeListContainer.setVisible(false);
-      this.overviewHint.setVisible(true);
-      this.overviewBtnText.setText('Close Map');
-      const worldCX = (COLS * TILE_SIZE) / 2;
-      const worldCY = (ROWS * TILE_SIZE) / 2;
+    if (!this.isOverview) {
+      this.hideEditUI();
+      const worldCX = (this.cols * TILE_SIZE) / 2;
+      const worldCY = (this.rows * TILE_SIZE) / 2;
       this.cameras.main.pan(worldCX, worldCY, 300, 'Power2');
       this.cameras.main.zoomTo(OVERVIEW_ZOOM, 300, 'Power2');
     } else {
-      this.editUI.forEach(el => el.setVisible(true));
-      this.holeListContainer.setVisible(true);
-      this.overviewHint.setVisible(false);
-      this.overviewBtnText.setText('Overview');
+      this.showEditUI();
       this.cameras.main.zoomTo(1.0, 300, 'Power2');
       if (this.placementMode === MODE.OVERVIEW_SELECT) {
         this.placementMode = MODE.PAINT;
@@ -191,8 +193,7 @@ export default class CourseScene extends Phaser.Scene {
     this.cameras.main.pan(worldX, worldY, 350, 'Power2');
     this.cameras.main.zoomTo(1.0, 350, 'Power2', true, (cam, progress) => {
       if (progress === 1) {
-        this.isOverview = false;
-        this.overviewBtnText.setText('Overview');
+        this.showEditUI();
         if (this.placementMode === MODE.OVERVIEW_SELECT) {
           this.placementMode = MODE.PLACE_TEE;
           this.updateStatusText('Tap to place the Tee Box');
@@ -213,17 +214,17 @@ export default class CourseScene extends Phaser.Scene {
   placeTee(wp) {
     const col = Math.floor(wp.x / TILE_SIZE);
     const row = Math.floor(wp.y / TILE_SIZE);
-    if (row < 0 || row >= ROWS || col < 0 || col >= COLS) return;
+    if (row < 0 || row >= this.rows || col < 0 || col >= this.cols) return;
     this.pendingTee = { col, row };
     this.drawMarkers();
     this.placementMode = MODE.PLACE_GREEN;
-    this.updateStatusText(`Tap to place the Pin  •  0 yds`);
+    this.updateStatusText('Tap to place the Pin  •  0 yds');
   }
 
   placeGreen(wp) {
     const col = Math.floor(wp.x / TILE_SIZE);
     const row = Math.floor(wp.y / TILE_SIZE);
-    if (row < 0 || row >= ROWS || col < 0 || col >= COLS) return;
+    if (row < 0 || row >= this.rows || col < 0 || col >= this.cols) return;
     this.pendingGreen = { col, row };
     this.drawMarkers();
     this.placementMode = MODE.PICK_PAR;
@@ -262,12 +263,10 @@ export default class CourseScene extends Phaser.Scene {
     this.markerLayer.clear();
     this.markerTexts.forEach(t => t.destroy());
     this.markerTexts = [];
-
     this.holeSystem.holes.forEach(h => {
       this.drawTeeMarker(h.teeCol, h.teeRow, h.id, 0xffffff);
       this.drawFlagMarker(h.greenCol, h.greenRow, h.id, 0xff4444);
     });
-
     if (this.pendingTee) this.drawTeeMarker(this.pendingTee.col, this.pendingTee.row, '?', 0xffdd00);
     if (this.pendingGreen) this.drawFlagMarker(this.pendingGreen.col, this.pendingGreen.row, '?', 0xffdd00);
   }
@@ -333,34 +332,34 @@ export default class CourseScene extends Phaser.Scene {
   createHUD() {
     const { width, height } = this.scale;
 
-    // Always-visible HUD bar
+    // Always-visible HUD bar (spans full width)
     this.add.rectangle(width / 2, 16, width, 32, 0x000000, 0.75).setScrollFactor(0).setDepth(10);
 
     // Overview button — always visible
-    const ovBtn = this.add.rectangle(34, 16, 70, 22, 0x333333)
+    const ovBtn = this.add.rectangle(40, 16, 72, 22, 0x333333)
       .setScrollFactor(0).setInteractive({ useHandCursor: true }).setDepth(10);
-    this.overviewBtnText = this.add.text(34, 16, 'Overview', {
-      fontSize: '8px', fill: '#cccccc', fontFamily: 'monospace',
+    this.overviewBtnText = this.add.text(40, 16, 'Overview', {
+      fontSize: '9px', fill: '#cccccc', fontFamily: 'monospace',
     }).setOrigin(0.5).setScrollFactor(0).setDepth(11);
     ovBtn.on('pointerover', () => ovBtn.setFillStyle(0x555555));
     ovBtn.on('pointerout', () => ovBtn.setFillStyle(0x333333));
     ovBtn.on('pointerdown', () => this.toggleOverview());
 
-    // Edit-mode UI (hidden in overview)
+    // Edit-mode elements (hidden during overview)
     this.statusText = this.add.text(width / 2, 16, '', {
       fontSize: '9px', fill: '#ffdd00', fontFamily: 'monospace',
     }).setOrigin(0.5).setScrollFactor(0).setDepth(11);
     this.editUI.push(this.statusText);
 
-    const statsText = this.add.text(width - 6, 8, '★★★☆☆  $12,500', {
+    const statsText = this.add.text(width - 8, 8, '★★★☆☆  $12,500', {
       fontSize: '10px', fill: '#f5f0e8', fontFamily: 'monospace',
     }).setOrigin(1, 0).setScrollFactor(0).setDepth(11);
     this.editUI.push(statsText);
 
     if (this.mode === 'sandbox') {
-      this.newHoleBtn = this.add.rectangle(120, 16, 80, 22, 0x1b5e20)
+      this.newHoleBtn = this.add.rectangle(126, 16, 82, 22, 0x1b5e20)
         .setScrollFactor(0).setInteractive({ useHandCursor: true }).setDepth(10);
-      this.newHoleBtnText = this.add.text(120, 16, '+ New Hole', {
+      this.newHoleBtnText = this.add.text(126, 16, '+ New Hole', {
         fontSize: '9px', fill: '#ffffff', fontFamily: 'monospace',
       }).setOrigin(0.5).setScrollFactor(0).setDepth(11);
       this.newHoleBtn.on('pointerover', () => this.newHoleBtn.setFillStyle(0x388e3c));
@@ -369,9 +368,9 @@ export default class CourseScene extends Phaser.Scene {
       this.editUI.push(this.newHoleBtn, this.newHoleBtnText);
     }
 
-    // Overview hint — shown only in overview mode
-    this.overviewHint = this.add.text(width / 2, height - 80, 'Tap anywhere to zoom in', {
-      fontSize: '16px', fill: '#ffffff', fontFamily: 'monospace',
+    // Overview hint — only visible during overview
+    this.overviewHint = this.add.text(width / 2, height - 50, 'Tap anywhere to zoom in', {
+      fontSize: '18px', fill: '#ffffff', fontFamily: 'monospace',
       stroke: '#000000', strokeThickness: 3,
     }).setOrigin(0.5).setScrollFactor(0).setDepth(15).setVisible(false);
   }
@@ -433,13 +432,10 @@ export default class CourseScene extends Phaser.Scene {
 
   updateHoleList() {
     this.holeListContainer.removeAll(true);
-    if (this.isOverview) this.holeListContainer.setVisible(false);
     if (this.holeSystem.getCount() === 0) return;
-
     const lineH = 13;
     const panelH = this.holeSystem.getCount() * lineH + 10;
     this.holeListContainer.add(this.add.rectangle(0, 0, 90, panelH, 0x000000, 0.7).setOrigin(1, 0));
-
     this.holeSystem.holes.forEach((h, i) => {
       const txt = this.add.text(-4, i * lineH + 8, `#${h.id}  Par ${h.par}`, {
         fontSize: '9px', fill: '#c8e6c9', fontFamily: 'monospace',
@@ -453,7 +449,6 @@ export default class CourseScene extends Phaser.Scene {
   showCareerIntro() {
     const { width, height } = this.scale;
     const panel = this.add.container(width / 2, height / 2).setScrollFactor(0).setDepth(30);
-
     const bg = this.add.rectangle(0, 0, 300, 160, 0x1a1a1a, 0.95);
     const title = this.add.text(0, -58, "You've Inherited a Course", {
       fontSize: '12px', fill: '#f5d76e', fontFamily: 'monospace', fontStyle: 'bold',
@@ -467,13 +462,11 @@ export default class CourseScene extends Phaser.Scene {
       "9 holes. Poor condition.\nRepair it. Grow it.",
       { fontSize: '9px', fill: '#888888', fontFamily: 'monospace', align: 'center' }
     ).setOrigin(0.5);
-
-    const okBtn = this.add.rectangle(0, 68, 100, 26, 0x2d5a1b).setInteractive({ useHandCursor: true });
+    const okBtn = this.add.rectangle(0, 68, 120, 26, 0x2d5a1b).setInteractive({ useHandCursor: true });
     const okTxt = this.add.text(0, 68, "Let's get to work", {
       fontSize: '9px', fill: '#ffffff', fontFamily: 'monospace',
     }).setOrigin(0.5);
     okBtn.on('pointerdown', () => panel.destroy());
-
     panel.add([bg, title, body, sub, okBtn, okTxt]);
   }
 }
