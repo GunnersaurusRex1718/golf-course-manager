@@ -85,6 +85,12 @@ export default class CourseScene extends Phaser.Scene {
 
     const wp = this.cameras.main.getWorldPoint(ptr.x, ptr.y);
 
+    // Any tap in overview zooms into that spot
+    if (this.isOverview) {
+      this.zoomToPoint(wp.x, wp.y);
+      return;
+    }
+
     if (this.placementMode === MODE.OVERVIEW_SELECT) {
       this.zoomToPoint(wp.x, wp.y);
       return;
@@ -158,12 +164,15 @@ export default class CourseScene extends Phaser.Scene {
   toggleOverview() {
     this.isOverview = !this.isOverview;
     if (this.isOverview) {
+      // Remove bounds so the camera can freely pan to the world centre at low zoom
+      this.cameras.main.removeBounds();
       const worldCX = (COLS * TILE_SIZE) / 2;
       const worldCY = (ROWS * TILE_SIZE) / 2;
       this.cameras.main.pan(worldCX, worldCY, 300, 'Power2');
       this.cameras.main.zoomTo(OVERVIEW_ZOOM, 300, 'Power2');
       this.overviewBtnText.setText('Close Map');
     } else {
+      this.cameras.main.setBounds(0, 0, COLS * TILE_SIZE, ROWS * TILE_SIZE);
       this.cameras.main.zoomTo(1.0, 300, 'Power2');
       this.overviewBtnText.setText('Overview');
       if (this.placementMode === MODE.OVERVIEW_SELECT) {
@@ -174,13 +183,17 @@ export default class CourseScene extends Phaser.Scene {
   }
 
   zoomToPoint(worldX, worldY) {
+    // Restore bounds before zooming back in
+    this.cameras.main.setBounds(0, 0, COLS * TILE_SIZE, ROWS * TILE_SIZE);
     this.cameras.main.pan(worldX, worldY, 350, 'Power2');
     this.cameras.main.zoomTo(1.0, 350, 'Power2', true, (cam, progress) => {
       if (progress === 1) {
         this.isOverview = false;
         this.overviewBtnText.setText('Overview');
-        this.placementMode = MODE.PLACE_TEE;
-        this.updateStatusText('Tap to place the Tee Box');
+        if (this.placementMode === MODE.OVERVIEW_SELECT) {
+          this.placementMode = MODE.PLACE_TEE;
+          this.updateStatusText('Tap to place the Tee Box');
+        }
       }
     });
   }
