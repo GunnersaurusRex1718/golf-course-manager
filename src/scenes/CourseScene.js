@@ -162,6 +162,14 @@ export default class CourseScene extends Phaser.Scene {
 
   // ─── Camera ──────────────────────────────────────────────────────────────
 
+  calcOverviewZoom() {
+    const viewW = this.scale.width;
+    const viewH = this.scale.height - 94; // subtract HUD (34) + toolbar (60)
+    const zoomX = viewW / (COLS * TILE_SIZE);
+    const zoomY = viewH / (ROWS * TILE_SIZE);
+    return Math.min(zoomX, zoomY) * 0.92;
+  }
+
   toggleOverview() {
     this.isOverview = !this.isOverview;
     if (this.isOverview) {
@@ -170,7 +178,7 @@ export default class CourseScene extends Phaser.Scene {
       const worldCX = (COLS * TILE_SIZE) / 2;
       const worldCY = (ROWS * TILE_SIZE) / 2;
       this.cameras.main.pan(worldCX, worldCY, 300, 'Power2');
-      this.cameras.main.zoomTo(OVERVIEW_ZOOM, 300, 'Power2');
+      this.cameras.main.zoomTo(this.calcOverviewZoom(), 300, 'Power2');
       this.overviewBtnText.setText('Close Map');
     } else {
       this.cameras.main.setBounds(0, 0, COLS * TILE_SIZE, ROWS * TILE_SIZE);
