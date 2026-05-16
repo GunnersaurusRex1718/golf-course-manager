@@ -36,6 +36,7 @@ export default class CourseScene extends Phaser.Scene {
     this.holeSystem = new HoleSystem();
     this.markerTexts = [];
     this.parUI = null;
+    this.editUI = [];
   }
 
   init(data) {
@@ -165,15 +166,20 @@ export default class CourseScene extends Phaser.Scene {
   toggleOverview() {
     this.isOverview = !this.isOverview;
     if (this.isOverview) {
-      // World is 2x the screen — zoom 0.47 shows the whole world filling the screen
+      this.editUI.forEach(el => el.setVisible(false));
+      this.holeListContainer.setVisible(false);
+      this.overviewHint.setVisible(true);
+      this.overviewBtnText.setText('Close Map');
       const worldCX = (COLS * TILE_SIZE) / 2;
       const worldCY = (ROWS * TILE_SIZE) / 2;
       this.cameras.main.pan(worldCX, worldCY, 300, 'Power2');
       this.cameras.main.zoomTo(OVERVIEW_ZOOM, 300, 'Power2');
-      this.overviewBtnText.setText('Close Map');
     } else {
-      this.cameras.main.zoomTo(1.0, 300, 'Power2');
+      this.editUI.forEach(el => el.setVisible(true));
+      this.holeListContainer.setVisible(true);
+      this.overviewHint.setVisible(false);
       this.overviewBtnText.setText('Overview');
+      this.cameras.main.zoomTo(1.0, 300, 'Power2');
       if (this.placementMode === MODE.OVERVIEW_SELECT) {
         this.placementMode = MODE.PAINT;
         this.updateStatusText('');
@@ -298,7 +304,8 @@ export default class CourseScene extends Phaser.Scene {
     const { width, height } = this.scale;
     const btnW = Math.floor(width / TILE_KEYS.length);
 
-    this.add.rectangle(width / 2, height - 30, width, 60, 0x1a1a1a).setScrollFactor(0);
+    const bg = this.add.rectangle(width / 2, height - 30, width, 60, 0x1a1a1a).setScrollFactor(0);
+    this.editUI.push(bg);
 
     TILE_KEYS.forEach((key, i) => {
       const x = i * btnW + btnW / 2;
@@ -307,35 +314,30 @@ export default class CourseScene extends Phaser.Scene {
 
       const btn = this.add.rectangle(x, y, btnW - 4, 52, tile.color)
         .setScrollFactor(0).setInteractive({ useHandCursor: true });
-
       btn.on('pointerdown', () => {
         this.selectedTile = key;
         this.cancelHolePlacement();
         this.placementMode = MODE.PAINT;
       });
 
-      this.add.text(x, y + 14, tile.label.substring(0, 4), {
+      const lbl = this.add.text(x, y + 14, tile.label.substring(0, 4), {
         fontSize: '8px', fill: tile.textColor, fontFamily: 'monospace',
       }).setOrigin(0.5).setScrollFactor(0);
+
+      this.editUI.push(btn, lbl);
     });
   }
 
   // ─── UI: HUD ─────────────────────────────────────────────────────────────
 
   createHUD() {
-    const { width } = this.scale;
+    const { width, height } = this.scale;
+
+    // Always-visible HUD bar
     this.add.rectangle(width / 2, 16, width, 32, 0x000000, 0.75).setScrollFactor(0).setDepth(10);
 
-    this.statusText = this.add.text(width / 2, 16, '', {
-      fontSize: '9px', fill: '#ffdd00', fontFamily: 'monospace',
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(11);
-
-    this.add.text(width - 6, 8, '★★★☆☆  $12,500', {
-      fontSize: '10px', fill: '#f5f0e8', fontFamily: 'monospace',
-    }).setOrigin(1, 0).setScrollFactor(0).setDepth(11);
-
-    // Overview button
-    const ovBtn = this.add.rectangle(34, 16, 60, 22, 0x333333)
+    // Overview button — always visible
+    const ovBtn = this.add.rectangle(34, 16, 70, 22, 0x333333)
       .setScrollFactor(0).setInteractive({ useHandCursor: true }).setDepth(10);
     this.overviewBtnText = this.add.text(34, 16, 'Overview', {
       fontSize: '8px', fill: '#cccccc', fontFamily: 'monospace',
@@ -344,17 +346,34 @@ export default class CourseScene extends Phaser.Scene {
     ovBtn.on('pointerout', () => ovBtn.setFillStyle(0x333333));
     ovBtn.on('pointerdown', () => this.toggleOverview());
 
-    // New Hole button (sandbox only — career holes are procedural)
+    // Edit-mode UI (hidden in overview)
+    this.statusText = this.add.text(width / 2, 16, '', {
+      fontSize: '9px', fill: '#ffdd00', fontFamily: 'monospace',
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(11);
+    this.editUI.push(this.statusText);
+
+    const statsText = this.add.text(width - 6, 8, '★★★☆☆  $12,500', {
+      fontSize: '10px', fill: '#f5f0e8', fontFamily: 'monospace',
+    }).setOrigin(1, 0).setScrollFactor(0).setDepth(11);
+    this.editUI.push(statsText);
+
     if (this.mode === 'sandbox') {
-      this.newHoleBtn = this.add.rectangle(110, 16, 80, 22, 0x1b5e20)
+      this.newHoleBtn = this.add.rectangle(120, 16, 80, 22, 0x1b5e20)
         .setScrollFactor(0).setInteractive({ useHandCursor: true }).setDepth(10);
-      this.newHoleBtnText = this.add.text(110, 16, '+ New Hole', {
+      this.newHoleBtnText = this.add.text(120, 16, '+ New Hole', {
         fontSize: '9px', fill: '#ffffff', fontFamily: 'monospace',
       }).setOrigin(0.5).setScrollFactor(0).setDepth(11);
       this.newHoleBtn.on('pointerover', () => this.newHoleBtn.setFillStyle(0x388e3c));
       this.newHoleBtn.on('pointerout', () => this.newHoleBtn.setFillStyle(0x1b5e20));
       this.newHoleBtn.on('pointerdown', () => this.startHolePlacement());
+      this.editUI.push(this.newHoleBtn, this.newHoleBtnText);
     }
+
+    // Overview hint — shown only in overview mode
+    this.overviewHint = this.add.text(width / 2, height - 80, 'Tap anywhere to zoom in', {
+      fontSize: '16px', fill: '#ffffff', fontFamily: 'monospace',
+      stroke: '#000000', strokeThickness: 3,
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(15).setVisible(false);
   }
 
   updateStatusText(msg) {
@@ -414,6 +433,7 @@ export default class CourseScene extends Phaser.Scene {
 
   updateHoleList() {
     this.holeListContainer.removeAll(true);
+    if (this.isOverview) this.holeListContainer.setVisible(false);
     if (this.holeSystem.getCount() === 0) return;
 
     const lineH = 13;
