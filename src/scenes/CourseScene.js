@@ -162,26 +162,16 @@ export default class CourseScene extends Phaser.Scene {
 
   // ─── Camera ──────────────────────────────────────────────────────────────
 
-  calcOverviewZoom() {
-    const viewW = this.scale.width;
-    const viewH = this.scale.height - 94; // subtract HUD (34) + toolbar (60)
-    const zoomX = viewW / (COLS * TILE_SIZE);
-    const zoomY = viewH / (ROWS * TILE_SIZE);
-    return Math.min(zoomX, zoomY) * 0.92;
-  }
-
   toggleOverview() {
     this.isOverview = !this.isOverview;
     if (this.isOverview) {
-      // Remove bounds so the camera can freely pan to the world centre at low zoom
-      this.cameras.main.removeBounds();
+      // World is 2x the screen — zoom 0.47 shows the whole world filling the screen
       const worldCX = (COLS * TILE_SIZE) / 2;
       const worldCY = (ROWS * TILE_SIZE) / 2;
       this.cameras.main.pan(worldCX, worldCY, 300, 'Power2');
-      this.cameras.main.zoomTo(this.calcOverviewZoom(), 300, 'Power2');
+      this.cameras.main.zoomTo(OVERVIEW_ZOOM, 300, 'Power2');
       this.overviewBtnText.setText('Close Map');
     } else {
-      this.cameras.main.setBounds(0, 0, COLS * TILE_SIZE, ROWS * TILE_SIZE);
       this.cameras.main.zoomTo(1.0, 300, 'Power2');
       this.overviewBtnText.setText('Overview');
       if (this.placementMode === MODE.OVERVIEW_SELECT) {
@@ -192,8 +182,6 @@ export default class CourseScene extends Phaser.Scene {
   }
 
   zoomToPoint(worldX, worldY) {
-    // Restore bounds before zooming back in
-    this.cameras.main.setBounds(0, 0, COLS * TILE_SIZE, ROWS * TILE_SIZE);
     this.cameras.main.pan(worldX, worldY, 350, 'Power2');
     this.cameras.main.zoomTo(1.0, 350, 'Power2', true, (cam, progress) => {
       if (progress === 1) {

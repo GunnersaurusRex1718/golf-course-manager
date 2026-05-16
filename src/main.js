@@ -6,14 +6,13 @@ import { GAME_WIDTH, GAME_HEIGHT } from './config/GameConfig.js';
 
 const config = {
   type: Phaser.AUTO,
+  width: GAME_WIDTH,
+  height: GAME_HEIGHT,
   backgroundColor: '#1a1a2e',
   pixelArt: true,
   scene: [BootScene, MainMenuScene, CourseScene],
   scale: {
-    mode: Phaser.Scale.RESIZE,
-    autoCenter: Phaser.Scale.CENTER_BOTH,
-    width: window.innerWidth,
-    height: window.innerHeight,
+    mode: Phaser.Scale.NONE,
   },
 };
 
