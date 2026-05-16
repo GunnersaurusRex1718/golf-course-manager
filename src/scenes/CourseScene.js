@@ -81,7 +81,8 @@ export default class CourseScene extends Phaser.Scene {
 
   onPointerDown(ptr) {
     const inToolbar = ptr.y > this.scale.height - 60;
-    if (inToolbar) return;
+    const inHUD = ptr.y < 34;
+    if (inToolbar || inHUD) return;
 
     const wp = this.cameras.main.getWorldPoint(ptr.x, ptr.y);
 
